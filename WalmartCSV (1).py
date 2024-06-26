@@ -19,7 +19,7 @@ def main(): # Main function which ties functions together, and creates the apps 
 
 
 def CostCollector():
-    for row in dictRdr: # Loop through the file for each row inside the Primary category section, and it's corresponding value, then interst it into inventory cost
+    for row in dictRdr: # Loop through the file for each row inside the Primary category section, and it's corresponding value, then insert it into inventory cost
         if row['primary_category'] in inventoryCost.keys():
             inventoryCost[row['primary_category']] += float(row['price']) * float(row['quantity'])
         else:
