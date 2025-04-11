@@ -3,7 +3,8 @@
 #### Video URL: <https://youtu.be/a82zQquSlGc>
 ## Game overview
 
-## The user goes 1v1 against the AI to get three hits before being hit three times themself. The player gets one shot and then there is a cool down period until their shot hits the end of the screen. SpiderMan has two movement options that are left and right. This allows the users to dodge the incoming attacks from Green_Goblin while trying to land hits of their own. Green Gobling will move unpredictably while dropping attacks to add a challange. These attacks are pumkins. Both Spider-Man and Green_Goblin have three lives. Each time a playe is hit by one of these attacks they will lose a life. Lifes are represented in the top left and right of each screen. The player should make sure to not get hit before running out of hearts.
+## The user goes 1v1 against the AI to get three hits before being hit three times themselves. The player gets one shot and then there is a cooldown period until their shot reaches the end of the screen. Spider-Man has two movement options: left and right. This allows the user to dodge incoming attacks from Green Goblin while attempting to land hits. Green Goblin will move unpredictably while dropping attacks to add a challenge. These attacks are pumpkins. Both Spider-Man and Green Goblin have three lives. Each time a player is hit by one of these attacks, they will lose a life. Lives are represented in the top left and right of each screen. The player should ensure they do not get hit before running out of hearts.
+
 
 ## Features
 - *Life System*: represented in the top left and top right corners of the screen
