@@ -1,4 +1,4 @@
-# SpiderMan Video Game
+# Hero Video Game
 ## Github: Kaden103
 #### Video URL: <https://youtu.be/a82zQquSlGc>
 ## Game overview
