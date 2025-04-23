@@ -1,245 +1,262 @@
+import asyncio
 import pygame
 import random
-pygame.init()
-WIDTH, HEIGHT = 1024, 940
-WIN = pygame.display.set_mode((WIDTH, HEIGHT))
-running = True
-screen = pygame.display.set_caption("Spider-Man")
-back_ground = pygame.image.load("NY_BackGround.jpeg")
-timer = pygame.time.Clock()
-fps = 60
-dt = 0
-moving = False
-First_Drop = False
-Second_Drop = False
-Life = 3
-Goblin_Heads = 3
-
-# Surfaces In Game
-
-X_wall = pygame.Surface((2, 940))
-X_wall.fill((255,0,0))
-X_wall_rect = X_wall.get_rect()
-
-# Green Goblin Movement
-Villian = pygame.image.load('Green_Goblin.png')
-Green_Gob = Villian.get_rect()
-Green_GobX = 2
 
 
 
-# Spider Man Movement
-moves = [pygame.image.load('Standing.png'), pygame.image.load('Left_direction.png'), pygame.image.load('Right_direction.png'),pygame.image.load('Jumppp.png')]
-frame_moment = 0
-Spidey_rect = moves[frame_moment].get_rect()
-Spidey_rect.midbottom = (512, 940)
-
-# Web_Shooter
-Webs = pygame.image.load('Web_Shot.png')
-Web_Shot = Webs.get_rect()
-Web_ShotY = 4
-Web_Shot.x = 500
-
-# Pumkin Image
-Gob_Attack = pygame.image.load('Gob_Pumkin.png')
-Pumkin = Gob_Attack.get_rect()
-PumkinY = 3
-
-# Life Count
-Heart_One = pygame.image.load('Hearts.png')
-Show_Heart = Heart_One.get_rect()
-Show_Heart.x = 880
-Show_Heart.y = 10
-Heart_Two = pygame.image.load('Hearts_2.png')
-Show_Heart_2 = Heart_Two.get_rect()
-Show_Heart_2.x = 930
-Show_Heart_2.y = 10
-Heart_Three = pygame.image.load('Hearts_3.png')
-Show_Heart_3 = Heart_Three.get_rect()
-Show_Heart_3.x = 980
-Show_Heart_3.y = 10
-
-# Green Goblin Life Count
-Goblin_Life = pygame.image.load('Goblin_Life.png')
-Goblin_Life_Count = Goblin_Life.get_rect()
-Goblin_Life_Count.x = 15
-Goblin_Life_Count.y = 10
-Goblin_Life_Second = pygame.image.load('Goblin_Life_2.png')
-Goblin_Life_2 = Goblin_Life_Second.get_rect()
-Goblin_Life_2.x = 65
-Goblin_Life_2.y = 10
-Goblin_Life_Third = pygame.image.load('Goblin_Life_3.png')
-Goblin_Life_3 = Goblin_Life_Third.get_rect()
-Goblin_Life_3.x = 115
-Goblin_Life_3.y = 10
-# Spider_Man Hit Sound
-
-
-
-
-def Movement():
-    global frame_moment
-    keys = pygame.key.get_pressed()
-    if keys[pygame.K_a]:
-        frame_moment = 1
-    if keys[pygame.K_d]:
-        frame_moment = 2
-    if keys[pygame.K_SPACE]:
-        frame_moment = 3
-    if not(keys[pygame.K_a] or keys[pygame.K_d] or keys[pygame.K_SPACE]):
-        frame_moment = 0
-
-
+# Screen Settings
+def init_screen():
+    pygame.init()
+    global WIN, WIDTH, HEIGHT, FPS, timer
+    WIDTH, HEIGHT = 1024, 940
+    WIN = pygame.display.set_mode((WIDTH, HEIGHT))
+    pygame.display.set_caption("Spider-Man")
+    FPS = 100
+    timer = pygame.time.Clock()
     
-def draw():
-    global Life
-    global moving
-    WIN.blit(back_ground, (0, 0))
-    WIN.blit(moves[frame_moment], Spidey_rect)
-    WIN.blit(X_wall, (0,0))
-    WIN.blit(Villian, Green_Gob)
-    if moving == True:
-        WIN.blit(Webs, Web_Shot)
-    if First_Drop == True or Second_Drop == True:
-        WIN.blit(Gob_Attack, Pumkin)
-    if Life == 3:
-        WIN.blit(Heart_One, Show_Heart)
-        WIN.blit(Heart_Two, Show_Heart_2)
-        WIN.blit(Heart_Three, Show_Heart_3)
-    if Life == 2:
-         WIN.blit(Heart_One, Show_Heart)
-         WIN.blit(Heart_Two, Show_Heart_2)
-    if Life == 1:
-        WIN.blit(Heart_One, Show_Heart)
-    if Goblin_Heads == 3:
-        WIN.blit(Goblin_Life, Goblin_Life_Count)
-        WIN.blit(Goblin_Life_Second, Goblin_Life_2)
-        WIN.blit(Goblin_Life_Third, Goblin_Life_3)
-    if Goblin_Heads == 2:
-        WIN.blit(Goblin_Life, Goblin_Life_Count)
-        WIN.blit(Goblin_Life_Second, Goblin_Life_2)
-    if Goblin_Heads == 1:
-        WIN.blit(Goblin_Life, Goblin_Life_Count)
-    
+
+
         
-        
-def Boundaries():
-    End_of_Screen = WIN.get_width()
-    End_of_Screen2 = WIN.get_height()
-    if Spidey_rect.colliderect(X_wall_rect):
-        Spidey_rect.left = X_wall_rect.right
-    if Spidey_rect.right >= End_of_Screen:
-        Spidey_rect.right = End_of_Screen
-    if Spidey_rect.bottom >= End_of_Screen2:
-        Spidey_rect.bottom = End_of_Screen2
+def quit_game():
+    pygame.display.quit()  # Close the display but avoid full quit
+    loop = asyncio.get_event_loop()
+    loop.stop()  # Properly stop the async event loop in pygbag
+ 
 
+# Spider-Man Class
+class SpiderMan:
+    def __init__(self):
+        self.moves = []
+        self.frame_moment = 0
+        self.heart = 3
+        self.speed = 500
+        self.life = 3
+        self.moving = False
+        self.load_images()
+    def load_images(self):
+        try:
+            self.moves = [
+                pygame.image.load('Standing.png').convert_alpha(),
+                pygame.image.load('Left_direction.png').convert_alpha(),
+                pygame.image.load('Right_direction.png').convert_alpha(),
+                pygame.image.load('Jumppp.png').convert_alpha()
+            ]
+            self.heart_one =  pygame.image.load('Hearts.png').convert_alpha()
+            self.heart_two = pygame.image.load('Hearts_2.png').convert_alpha()
+            self.heart_three = pygame.image.load('Hearts_3.png').convert_alpha()
+            self.heart_one_image = self.heart_one.get_rect()
+            self.heart_one_image.x = 880
+            self.heart_one_image.y = 10
+            self.heart_two_image = self.heart_two.get_rect()
+            self.heart_two_image.x = 930
+            self.heart_two_image.y = 10
+            self.heart_three_image = self.heart_three.get_rect()
+            self.heart_three_image.x = 980
+            self.heart_three_image.y = 10
+            self.rect = self.moves[self.frame_moment].get_rect(midbottom=(512, HEIGHT))
+            self.web_shot = pygame.image.load('Web_Shot.png').convert_alpha()
+            self.web_rect = self.web_shot.get_rect(midbottom=self.rect.midtop)
+            self.web_button_still = pygame.Rect(940, 730, 100, 50)  # (X, Y, Width, Height)
+        except pygame.error as e:
+            print(f"Error loading images: {e}")
 
-
-def Green_Goblin_Movement():
-    global Green_Gob, Green_GobX
-    End_of_Screen = WIN.get_width()
-    if Green_Gob.colliderect(X_wall_rect):
-        Green_GobX = 2
-        Green_Gob.y = random.randint(0,200)
-    if Green_Gob.right >= End_of_Screen:
-        Green_GobX = -Green_GobX
-        Green_Gob.y = random.randint(0,200)
-    if Green_Gob.x == 490:
-        Green_Gob.y = random.randint(0,200)
-    Green_Gob.x += Green_GobX
-
-def Web_Shooter():
-    global Web_Shot, Web_ShotY, moving, Spidey_rect
-    keys = pygame.key.get_pressed()
-    if keys[pygame.K_SPACE] and not moving:
-        Web_Shot.y = Spidey_rect.y
-        Web_Shot.x = Spidey_rect.right
-        moving = True
-    if moving and Web_Shot.y > 0:
-        Web_Shot.y -= Web_ShotY
-    if Web_Shot.y <= 0:
-        moving = False
-        Web_Shot.y = Spidey_rect.y
-        Web_Shot.x = Spidey_rect.right
-
-def Pumkin_Drop():
-    global Green_Gob, Pumkin, First_Drop, Second_Drop
-    if Green_Gob.x == 490 and not First_Drop:
-        First_Drop = True
-    if First_Drop:
-        Pumkin.y += PumkinY
-    if not First_Drop:
-        Pumkin.x = Green_Gob.x + 20
-        Pumkin.y = Green_Gob.y - 20
-    if Pumkin.y >= 940:
-        First_Drop = False
-    if Green_Gob.x == 240 and not First_Drop:
-        First_Drop = True
-    if First_Drop:
-        Pumkin.y += PumkinY
-    if not First_Drop:
-        Pumkin.x = Green_Gob.x + 20
-        Pumkin.y = Green_Gob.y - 20
-    if Pumkin.y >= 940:
-        First_Drop = False
-    if Green_Gob.x == 700 and not First_Drop:
-        First_Drop = True
-    if First_Drop:
-        Pumkin.y += PumkinY
-    if not First_Drop:
-        Pumkin.x = Green_Gob.x + 20
-        Pumkin.y = Green_Gob.y - 20
-    if Pumkin.y >= 940:
-        First_Drop = False
-   
-
-def damage():
-    global running, Life, First_Drop
-    if Spidey_rect.colliderect(Pumkin):
-        Life -= 1
-        First_Drop = False
-    if Life == 0:
-        running = False
-
-def damage_Goblin():
-    global Green_Gob, Goblin_Life, Goblin_Heads, running, moving
-    if Green_Gob.colliderect(Web_Shot):
-        Goblin_Heads -= 1
-        moving = False
-        Web_Shot.y = Spidey_rect.y
-        Web_Shot.x = Spidey_rect.right
-    if Goblin_Heads == 0:
-        running = False
-    
-
-
-def main():
-    global running
-    running = True
-    dt = timer.tick(60) / 1000
-    while running == True:
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                running = False
-        Movement()
-        damage()
-        keys = pygame.key.get_pressed()
-        if keys[pygame.K_s]:
-            Spidey_rect.y += 300 * dt
+    def move(self, keys, dt):
         if keys[pygame.K_a]:
-            Spidey_rect.x -= 300 * dt
-        if keys[pygame.K_d]:
-            Spidey_rect.x += 300 * dt
+            self.frame_moment = 1
+            self.rect.x -= self.speed * dt
+        elif keys[pygame.K_d]:
+            self.frame_moment = 2
+            self.rect.x += self.speed * dt
+        elif keys[pygame.K_SPACE]:
+            self.frame_moment = 3
+        else:
+            self.frame_moment = 0
+
+
+    def enforce_boundaries(self):
+        self.rect.clamp_ip(WIN.get_rect())  # Prevents Spider-Man from leaving screen bounds
+
+    def shoot_web(self):
+        keys = pygame.key.get_pressed()
+        if keys[pygame.K_SPACE] and not self.moving:
+            self.web_rect.midbottom = self.rect.midtop
+            self.moving = True
+        if self.moving:
+            self.web_rect.y -= 11 # Speed of web shot
+        if self.web_rect.y <= 0:
+            self.moving = False
+        if self.moving is False:
+            self.web_rect.midbottom = self.rect.midtop
+        
+        
+    def draw(self):
+        WIN.blit(self.moves[self.frame_moment], self.rect)
+        if self.moving:
+            WIN.blit(self.web_shot, self.web_rect)
+        if self.heart == 3:
+            WIN.blit(self.heart_one, self.heart_one_image)
+            WIN.blit(self.heart_two, self.heart_two_image)
+            WIN.blit(self.heart_two, self.heart_three_image)
+        if self.heart == 2:
+            WIN.blit(self.heart_one, self.heart_one_image)
+            WIN.blit(self.heart_two, self.heart_two_image)
+        if self.heart == 1:
+            WIN.blit(self.heart_one, self.heart_one_image)
+
+# Green Goblin Class
+class GreenGoblin:
+    def __init__(self):
+        self.image = None
+        self.rect = None
+        self.speed_x = 10
+        self.health = 3
+        self.pumpkin_image = None
+        self.pumkin_image2 = None
+    def load_images(self):
+        try:
+            self.image = pygame.image.load('Green_Goblin.png').convert_alpha()
+            self.rect = self.image.get_rect(topleft=(2, random.randint(0, 200)))
+            self.pumpkin_image = pygame.image.load('Gob_Pumkin.png').convert_alpha()
+            self.pumkin_image2 = pygame.image.load('Gob_Pumkin_2.png').convert_alpha()
+            self.pumpkin_rect = self.pumpkin_image.get_rect(midbottom=self.rect.midtop)
+            self.pumkin_rect_2 = self.pumkin_image2.get_rect(midbottom=self.rect.midtop)
+            self.life_one = pygame.image.load('Goblin_Life.png').convert_alpha()
+            self.life_one_rect = self.life_one.get_rect()
+            self.life_one_rect.x = 15
+            self.life_one_rect.y = 10
+            self.life_two = pygame.image.load('Goblin_Life_2.png').convert_alpha()
+            self.life_two_rect = self.life_two.get_rect()
+            self.life_two_rect.x = 65
+            self.life_two_rect.y = 10
+            self.life_three = pygame.image.load('Goblin_Life_3.png').convert_alpha()
+            self.life_three_rect = self.life_three.get_rect()
+            self.life_three_rect.x = 115
+            self.life_three_rect.y = 10
+            self.pumpkin_moving = False
+            self.pumpkin_moving2 = False
+        except pygame.error as e:
+            print(f"Error loading images: {e}")
+
+    def move(self):
+        self.rect.x += self.speed_x  
+        if self.rect.left <= 0 or self.rect.right >= WIDTH:
+            self.speed_x = -self.speed_x
+            self.rect.y = random.randint(0, 470)
+            self.rect.x = random.randint(0, WIDTH - self.rect.width)
+        if 450 <= self.rect.x <= 460:
+            self.rect.y = random.randint(0, 400)
+        if 200 <= self.rect.x <= 210:
+            self.rect.y = random.randint(0, 400)
+
+    def drop_pumpkin(self):
+        if not self.pumpkin_moving:
+            self.pumpkin_rect.midbottom = self.rect.midtop
+        if 0 <= self.pumpkin_rect.x <= 100:
+            self.pumpkin_moving = True
+            self.pumpkin_rect.y += 10
+        if 490 <= self.pumpkin_rect.x <= 500:
+            self.pumpkin_moving = True
+            self.pumpkin_rect.y += 10
+        if 900 <= self.pumpkin_rect.x <= 1000:
+            self.pumpkin_moving = True
+            self.pumpkin_rect.y += 10
+        if self.pumpkin_moving:
+            self.pumpkin_rect.y += 10
+        if self.pumpkin_rect.y >= HEIGHT:
+            self.pumpkin_moving = False
+        if not self.pumpkin_moving2:
+            self.pumkin_rect_2.midbottom = self.rect.midtop
+            self.pumpkin_moving2 = True
+        if self.pumpkin_moving2:
+            self.pumkin_rect_2.y += 15
+        if self.pumkin_rect_2.y >= HEIGHT:
+            self.pumpkin_moving2 = False
+
+    def draw(self):
+        WIN.blit(self.image, self.rect)
+        WIN.blit(self.pumpkin_image, self.pumpkin_rect)
+        WIN.blit(self.pumkin_image2, self.pumkin_rect_2 )
+        if self.health == 3:
+            WIN.blit(self.life_one, self.life_one_rect)
+            WIN.blit(self.life_two, self.life_two_rect)
+            WIN.blit(self.life_three, self.life_three_rect)
+        if self.health == 2:
+            WIN.blit(self.life_one, self.life_one_rect)
+            WIN.blit(self.life_two, self.life_two_rect)
+        if self.health == 1:
+            WIN.blit(self.life_one, self.life_one_rect)
             
-        damage_Goblin()
-        Pumkin_Drop()
-        Green_Goblin_Movement()
-        Web_Shooter()
-        Boundaries()
-        WIN.fill((0, 0, 0)) 
-        draw()
-        pygame.display.update()
-    
-    pygame.quit()
-    
-main()
+async def End_game_screen():
+    image = pygame.image.load("Game End.png")
+    WIN.blit(image, (0, 0))
+    pygame.display.update()
+    waiting = True
+    while waiting:
+        for event in pygame.event.get():
+            if event.type == pygame.KEYDOWN and event.key == pygame.K_RETURN:  # Correct key detection
+                return True
+            if event.type == pygame.QUIT:
+                quit_game()
+        await asyncio.sleep(0.05)  # Delay to prevent high CPU usage
+           
+    return False
+# Game Loop
+async def main():
+    init_screen()
+    spiderman = SpiderMan()
+    green_goblin = GreenGoblin()
+    while True:
+        spiderman.heart = 3
+        green_goblin.health = 3
+        spiderman.load_images()
+        green_goblin.load_images()
+        running = True
+        while running:
+            dt = timer.tick(FPS) / 1000 # Time delta for smooth movement
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    quit_game()
+                    return
+
+            # Input Handling
+            keys = pygame.key.get_pressed()
+            spiderman.move(keys, dt)
+            spiderman.enforce_boundaries()
+            spiderman.shoot_web()
+
+            green_goblin.move()
+            green_goblin.drop_pumpkin()
+
+            # Collision Detection
+            if spiderman.web_rect.colliderect(green_goblin.rect):
+                spiderman.moving = False
+                green_goblin.health -= 1
+                spiderman.moving = False  # Reset web
+            if spiderman.rect.colliderect(green_goblin.pumpkin_rect):
+                green_goblin.pumpkin_moving = False
+                spiderman.heart -= 1
+                green_goblin.pumpkin_rect.midbottom = green_goblin.rect.midtop
+            if spiderman.rect.colliderect(green_goblin.pumkin_rect_2):
+                green_goblin.pumpkin_moving2 = False
+                spiderman.heart -= 1
+                green_goblin.pumkin_rect_2.midbottom = green_goblin.rect.midtop
+
+            # End Game Conditions
+            if green_goblin.health <= 0 or spiderman.heart <= 0:
+                if await End_game_screen():
+                    break
+                
+            if pygame.display.get_surface():
+                WIN.blit(pygame.image.load("NY_BackGround.png").convert(), (0, 0))
+                spiderman.draw()
+                green_goblin.draw()
+                pygame.display.update()
+            else:
+                print("Error: Pygame display not initialized!")
+
+            await asyncio.sleep(0.01)
+            if not running:
+                quit_game()
+                return
+
+asyncio.run( main() )
