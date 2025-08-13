@@ -3,7 +3,7 @@
 #### Video URL: <https://youtu.be/a82zQquSlGc>
 ## Game overview
 
-The user goes 1v1 against the AI to get three hits before being hit three times themself. The player gets one shot and then there is a cool down period until their shot hits the end of the screen. 
+The user goes 1v1 against the Goblin bot to get three hits before being hit three times themself. The player gets one shot and then there is a cool down period until their shot hits the end of the screen. 
 
 ## Features
 - *Life System*: represented in the top left and top right corners of the screen
@@ -23,4 +23,5 @@ The user goes 1v1 against the AI to get three hits before being hit three times 
 - *Surfaces*: Add three surfaces that Spiderman can use to help dodge incoming enemies
 - *Home-Screen and options menu*: Add start screen and options screen for more convience
 - *Animations* - Add more animations for attack effects and movements
+
 
