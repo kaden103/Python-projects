@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" href="Artpage.css">
+    <title>Bitcoin Calculator</title>
+</head>
+<body>
+
+    <h1 class="Title">Project Page</h1>
+
+    <main class="page-layout">
+        <section class="game-panel">
+            <div class="GameCover">
+                <img src="SpiderMannn/GameCover.png" alt="Spider-Man game cover" class="game-end">
+            </div>
+            <button class="gamebegin" onclick="window.location.href='https://convenient-widgets.onrender.com/static/SpiderMannn/build/web/index.html';">
+                Start
+            </button>
+        </section>
+
+        <section class="game-instructions">
+            <p>
+                Instructions:
+                <br>1. Use A to move left
+                <br>2. Use D to move right
+                <br>3. Use Space to shoot web
+                <br>4. Use Enter to restart the game
+                <br>5. Three lives for each game
+                <br>6. One web shot at a time
+            </p>
+        </section>
+
+        <section class="start">
+            <p>Enter the amount of Bitcoin to calculate its total value:</p>
+            <input id="number" type="text" placeholder="Enter amount here">
+            <button onclick="apCall()">Search</button>
+            <p id="result" class="amount"></p>
+        </section>
+    </main>
+    </div>
+
+    <script>
+        function formatCurrency(amount) {
+            return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount);
+        }
+
+        async function apCall() {
+            let userInput = document.getElementById("number").value.trim();
+            if (!userInput || isNaN(userInput)) {
+                document.getElementById("result").innerText = "Please enter a valid Bitcoin amount.";
+                return;
+            }
+
+            let apiKey = prompt("Enter your access key:");
+            if (!apiKey) {
+                document.getElementById("result").innerText = "Access key is required.";
+                return;
+            }
+
+            try {
+                let response = await fetch("https://convenient-widgets.onrender.com/get-price", { 
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ amount: userInput, api_key: apiKey }),
+                    mode: "cors",
+                    credentials: "include"
+                });
+
+                if (!response.ok) throw new Error("Network response was not ok");
+
+                let data = await response.json();
+                document.getElementById("result").innerText = data.error 
+                    ? data.error 
+                    : `Total value: ${formatCurrency(data.btc_price * parseFloat(userInput))}`;
+            } catch (error) {
+                document.getElementById("result").innerText = "Error fetching Bitcoin price.";
+                console.error("Fetch error:", error);
+            }
+        }
+    </script>
+
+</body>
+</html>

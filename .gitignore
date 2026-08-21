@@ -1,0 +1,6 @@
+# Pygbag's downloaded build-template cache; the deployable files remain in build/web.
+SpiderMannn/build/web-cache/
+
+# Local Python artifacts.
+__pycache__/
+*.py[cod]
