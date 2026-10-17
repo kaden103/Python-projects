@@ -45,7 +45,11 @@ class SpiderMan:
         self.frame = 0
         self.heart = 3
         self.rect = self.moves[self.frame].get_rect(midbottom=(WIDTH // 2, HEIGHT))
+        # Rects only hold whole pixels, so positions are tracked as floats and copied
+        # into the rects. This keeps speeds the same at any frame rate.
+        self.x = float(self.rect.x)
         self.web_rect = self.web_shot.get_rect(midbottom=self.rect.midtop)
+        self.web_y = float(self.web_rect.y)
         self.web_active = False
         self.hit_cooldown = 0.0
         self.velocity_x = 0.0
@@ -63,16 +67,19 @@ class SpiderMan:
         else:
             self.frame = 0
 
-        self.rect.x += horizontal_direction * PLAYER_SPEED * dt
         self.velocity_x = horizontal_direction * PLAYER_SPEED
-        self.rect.clamp_ip(pygame.Rect(0, 0, WIDTH, HEIGHT))
+        self.x += self.velocity_x * dt
+        self.x = max(0.0, min(WIDTH - self.rect.width, self.x))
+        self.rect.x = round(self.x)
 
         if keys[pygame.K_SPACE] and not self.web_active:
             self.web_rect.midbottom = self.rect.midtop
+            self.web_y = float(self.web_rect.y)
             self.web_active = True
 
         if self.web_active:
-            self.web_rect.y -= WEB_SPEED * dt
+            self.web_y -= WEB_SPEED * dt
+            self.web_rect.y = round(self.web_y)
             if self.web_rect.bottom <= 0:
                 self.web_active = False
 
@@ -100,15 +107,9 @@ class SpiderMan:
 class GreenGoblin:
     def __init__(self):
         self.image = load_image("Green_Goblin.png")
-        self.pumpkin_images = [
-            load_image("Gob_Pumkin.png"),
-            load_image("Gob_Pumkin_2.png"),
-        ]
-        self.life_images = [
-            load_image("Goblin_Life.png"),
-            load_image("Goblin_Life_2.png"),
-            load_image("Goblin_Life_3.png"),
-        ]
+        pumpkin_image = load_image("Gob_Pumkin.png")
+        self.pumpkin_images = [pumpkin_image, pumpkin_image]
+        self.life_image = load_image("Goblin_Life.png")
         self.reset()
 
     def reset(self):
@@ -117,9 +118,11 @@ class GreenGoblin:
         self.state = "patrol"
         self.state_timer = random.uniform(*GOBLIN_PATROL_TIME)
         self.rect = self.image.get_rect(topleft=(2, random.randint(0, 200)))
+        self.x = float(self.rect.x)
         self.pumpkin_rects = [
-            image.get_rect(midbottom=self.rect.midtop) for image in self.pumpkin_images
+            image.get_rect(midtop=self.rect.midbottom) for image in self.pumpkin_images
         ]
+        self.pumpkin_y = [float(rect.y) for rect in self.pumpkin_rects]
         self.pumpkin_active = [False, False]
         self.pumpkin_timers = [0.6, 1.2]
 
@@ -175,39 +178,40 @@ class GreenGoblin:
         speed_multiplier = 1 + self.difficulty * 0.2
         if self.state == "attack":
             speed_multiplier *= 0.45
-        self.rect.x += self.direction * GOBLIN_SPEED * speed_multiplier * dt
-        if self.rect.left <= 0 or self.rect.right >= WIDTH:
+        self.x += self.direction * GOBLIN_SPEED * speed_multiplier * dt
+        if self.x <= 0 or self.x + self.rect.width >= WIDTH:
             self.direction *= -1
-            self.rect.clamp_ip(pygame.Rect(0, 0, WIDTH, HEIGHT))
+            self.x = max(0.0, min(WIDTH - self.rect.width, self.x))
             self.rect.y = random.randint(0, 470)
+        self.rect.x = round(self.x)
 
     def _launch_attack(self):
         # The second pumpkin joins attacks after the Goblin takes its first hit.
         number_of_pumpkins = 1 if self.health == 3 else 2
         for index in range(number_of_pumpkins):
             if not self.pumpkin_active[index] and self.pumpkin_timers[index] <= 0:
-                self.pumpkin_rects[index].midbottom = self.rect.midtop
+                self.pumpkin_rects[index].midtop = self.rect.midbottom
+                self.pumpkin_y[index] = float(self.pumpkin_rects[index].y)
                 self.pumpkin_active[index] = True
 
     def _update_pumpkin(self, index, dt):
         rect = self.pumpkin_rects[index]
         if self.pumpkin_active[index]:
             speed_multiplier = 1 + self.difficulty * 0.15
-            rect.y += PUMPKIN_SPEEDS[index] * speed_multiplier * dt
+            self.pumpkin_y[index] += PUMPKIN_SPEEDS[index] * speed_multiplier * dt
+            rect.y = round(self.pumpkin_y[index])
             if rect.top >= HEIGHT:
                 self.reset_pumpkin(index)
             return
 
-        self.pumpkin_timers[index] -= dt
-        if self.pumpkin_timers[index] <= 0:
-            rect.midbottom = self.rect.midtop
-            self.pumpkin_active[index] = True
+        # Inactive pumpkins only recharge here; _launch_attack decides when they drop.
+        self.pumpkin_timers[index] = max(0.0, self.pumpkin_timers[index] - dt)
 
     def reset_pumpkin(self, index):
         self.pumpkin_active[index] = False
         cooldown_multiplier = 1 + self.difficulty * 0.2
         self.pumpkin_timers[index] = PUMPKIN_COOLDOWNS[index] / cooldown_multiplier
-        self.pumpkin_rects[index].midbottom = self.rect.midtop
+        self.pumpkin_rects[index].midtop = self.rect.midbottom
 
     def take_hit(self):
         self.health -= 1
@@ -227,8 +231,7 @@ class GreenGoblin:
                 surface.blit(image, rect)
 
         for index in range(self.health):
-            life_rect = self.life_images[index].get_rect(topleft=(15 + index * 50, 10))
-            surface.blit(self.life_images[index], life_rect)
+            surface.blit(self.life_image, (15 + index * 50, 10))
 
 
 class Game:
