@@ -1,4 +1,5 @@
 import asyncio
+import math
 import random
 from pathlib import Path
 
@@ -17,6 +18,17 @@ PLAYER_HIT_COOLDOWN = 0.65
 GOBLIN_PATROL_TIME = (1.0, 1.8)
 GOBLIN_TRACK_TIME = 1.1
 GOBLIN_ATTACK_TIME = 0.55
+GRAVITY = 2200
+JUMP_SPEED = 950
+AIR_CONTROL = 900
+MAX_AIR_SPEED = 1100
+CLIMB_SPEED = 320
+SWING_REACH_X = 220
+SWING_REACH_Y = 260
+SWING_TOP = 40
+SWING_PUMP = 700
+RUN_ANIMATION_FPS = 10
+CRAWL_ANIMATION_FPS = 6
 
 
 def load_image(filename, *, alpha=True):
@@ -26,13 +38,25 @@ def load_image(filename, *, alpha=True):
 
 
 class SpiderMan:
+    HITBOX_SIZE = (70, 96)
+
     def __init__(self):
-        self.moves = [
-            load_image("Standing.png"),
-            load_image("Left_direction.png"),
-            load_image("Right_direction.png"),
-            load_image("Jumppp.png"),
-        ]
+        # Sprites that face right; the left-facing versions are mirrored copies.
+        right = {
+            "run": [load_image(f"Spidey_Run_{n}.png") for n in (1, 2, 3)],
+            "dive": [pygame.transform.flip(load_image("Spidey_Dive.png"), True, False)],
+        }
+        self.facing_frames = {
+            1: right,
+            -1: {
+                name: [pygame.transform.flip(image, True, False) for image in images]
+                for name, images in right.items()
+            },
+        }
+        self.stand_image = load_image("Spidey_Stand.png")
+        self.jump_image = load_image("Spidey_Jump.png")
+        self.swing_image = load_image("Spidey_Swing.png")
+        self.climb_images = [load_image(f"Spidey_Climb_{n}.png") for n in (1, 2)]
         self.heart_images = [
             load_image("Hearts.png"),
             load_image("Hearts_2.png"),
@@ -42,36 +66,159 @@ class SpiderMan:
         self.reset()
 
     def reset(self):
-        self.frame = 0
         self.heart = 3
-        self.rect = self.moves[self.frame].get_rect(midbottom=(WIDTH // 2, HEIGHT))
+        self.rect = pygame.Rect((0, 0), self.HITBOX_SIZE)
+        self.rect.midbottom = (WIDTH // 2, HEIGHT)
         # Rects only hold whole pixels, so positions are tracked as floats and copied
         # into the rects. This keeps speeds the same at any frame rate.
         self.x = float(self.rect.x)
+        self.y = float(self.rect.y)
+        self.velocity_x = 0.0
+        self.velocity_y = 0.0
+        self.facing = 1
+        self.on_ground = True
+        self.wall_side = 0  # -1 clinging to the left wall, 1 to the right, 0 neither
+        self.anchor = None  # Where the swing web is stuck, while swinging
+        self.rope_length = 0.0
+        self.swing_held = False
+        self.jump_held = False
+        self.animation_time = 0.0
+        self.image = self.stand_image
         self.web_rect = self.web_shot.get_rect(midbottom=self.rect.midtop)
         self.web_y = float(self.web_rect.y)
         self.web_active = False
         self.hit_cooldown = 0.0
-        self.velocity_x = 0.0
 
     def update(self, keys, dt):
         self.hit_cooldown = max(0.0, self.hit_cooldown - dt)
+        self.animation_time += dt
 
         horizontal_direction = int(keys[pygame.K_d]) - int(keys[pygame.K_a])
-        if horizontal_direction < 0:
-            self.frame = 1
-        elif horizontal_direction > 0:
-            self.frame = 2
-        elif keys[pygame.K_SPACE]:
-            self.frame = 3
+        vertical_direction = int(keys[pygame.K_s]) - int(keys[pygame.K_w])
+        if horizontal_direction:
+            self.facing = horizontal_direction
+
+        swing_pressed = keys[pygame.K_LSHIFT] or keys[pygame.K_RSHIFT] or keys[pygame.K_e]
+        if swing_pressed and not self.swing_held:
+            self._attach_swing_web()
+        elif not swing_pressed and self.anchor:
+            self.anchor = None  # Letting go keeps the swing's momentum
+        self.swing_held = swing_pressed
+
+        jump_pressed = keys[pygame.K_w] or keys[pygame.K_UP]
+        if jump_pressed and not self.jump_held and self.on_ground:
+            self.velocity_y = -JUMP_SPEED
+            self.on_ground = False
+        self.jump_held = jump_pressed
+
+        if self.wall_side:
+            self._crawl(horizontal_direction, vertical_direction)
+        elif self.anchor:
+            self._swing(horizontal_direction, dt)
+        elif self.on_ground:
+            self.velocity_x = horizontal_direction * PLAYER_SPEED
         else:
-            self.frame = 0
+            # Steer a little in the air without killing momentum from a swing.
+            self.velocity_x += horizontal_direction * AIR_CONTROL * dt
+            self.velocity_x = max(-MAX_AIR_SPEED, min(MAX_AIR_SPEED, self.velocity_x))
+            self.velocity_y += GRAVITY * dt
 
-        self.velocity_x = horizontal_direction * PLAYER_SPEED
         self.x += self.velocity_x * dt
-        self.x = max(0.0, min(WIDTH - self.rect.width, self.x))
-        self.rect.x = round(self.x)
+        self.y += self.velocity_y * dt
+        if self.anchor:
+            self._apply_rope()
+        self._keep_on_screen(horizontal_direction)
+        self.rect.topleft = (round(self.x), round(self.y))
 
+        self._update_web_shot(keys, dt)
+        self._choose_image(keys)
+
+    def _attach_swing_web(self):
+        """Stick a web above and ahead of Spider-Man, if there is room to swing."""
+        # From a wall, swing out into the city rather than into the wall.
+        direction = -self.wall_side if self.wall_side else self.facing
+        anchor_x = self.rect.centerx + direction * SWING_REACH_X
+        anchor_x = max(20, min(WIDTH - 20, anchor_x))
+        anchor_y = max(SWING_TOP, self.rect.top - SWING_REACH_Y)
+        if self.rect.centery - anchor_y < 120:
+            return
+        self.anchor = pygame.Vector2(anchor_x, anchor_y)
+        self.rope_length = self.anchor.distance_to(self.rect.center)
+        self.wall_side = 0
+        self.on_ground = False
+
+    def _swing(self, horizontal_direction, dt):
+        self.velocity_y += GRAVITY * dt
+        # Holding A or D pumps the swing along the arc, like kicking on a playground swing.
+        to_anchor = self.anchor - pygame.Vector2(self.rect.center)
+        if to_anchor.length_squared():
+            tangent = pygame.Vector2(-to_anchor.y, to_anchor.x).normalize()
+            if tangent.x * horizontal_direction < 0:
+                tangent = -tangent
+            push = tangent * SWING_PUMP * dt * abs(horizontal_direction)
+            self.velocity_x += push.x
+            self.velocity_y += push.y
+
+    def _apply_rope(self):
+        """Keep Spider-Man within the web's length and cancel any stretch along it."""
+        center = pygame.Vector2(self.x + self.rect.width / 2, self.y + self.rect.height / 2)
+        offset = center - self.anchor
+        distance = offset.length()
+        if distance <= self.rope_length or distance == 0:
+            return
+        direction = offset / distance
+        center = self.anchor + direction * self.rope_length
+        self.x = center.x - self.rect.width / 2
+        self.y = center.y - self.rect.height / 2
+        velocity = pygame.Vector2(self.velocity_x, self.velocity_y)
+        outward = velocity.dot(direction)
+        if outward > 0:
+            velocity -= direction * outward
+        self.velocity_x, self.velocity_y = velocity.x, velocity.y
+
+    def _crawl(self, horizontal_direction, vertical_direction):
+        if horizontal_direction == -self.wall_side:
+            # Pushing away from the wall lets go of it.
+            self.wall_side = 0
+            self.velocity_x = horizontal_direction * PLAYER_SPEED * 0.6
+            self.velocity_y = 0.0
+            return
+        self.velocity_x = 0.0
+        self.velocity_y = vertical_direction * CLIMB_SPEED
+
+    def _keep_on_screen(self, horizontal_direction):
+        max_x = WIDTH - self.rect.width
+        max_y = HEIGHT - self.rect.height
+        for side, edge in ((-1, 0.0), (1, float(max_x))):
+            past_edge = self.x <= edge if side < 0 else self.x >= edge
+            if not past_edge:
+                continue
+            self.x = edge
+            moving_into_wall = self.velocity_x * side > 0
+            if moving_into_wall:
+                self.velocity_x = 0.0
+            # Swinging into a wall, or steering into it while off the ground, makes him stick.
+            if not self.wall_side and (
+                (self.anchor and moving_into_wall)
+                or (horizontal_direction == side and self.y < max_y - 1)
+            ):
+                self.wall_side = side
+                self.facing = side
+                self.anchor = None
+                self.velocity_y = 0.0
+
+        if self.y <= 0:
+            self.y = 0.0
+            self.velocity_y = max(0.0, self.velocity_y)
+        if self.y >= max_y:
+            self.y = float(max_y)
+            self.velocity_y = min(0.0, self.velocity_y)
+            if not self.anchor and not self.wall_side:
+                self.on_ground = True
+        elif not self.wall_side:
+            self.on_ground = False
+
+    def _update_web_shot(self, keys, dt):
         if keys[pygame.K_SPACE] and not self.web_active:
             self.web_rect.midbottom = self.rect.midtop
             self.web_y = float(self.web_rect.y)
@@ -86,6 +233,29 @@ class SpiderMan:
         if not self.web_active:
             self.web_rect.midbottom = self.rect.midtop
 
+    def _choose_image(self, keys):
+        frames = self.facing_frames[self.facing]
+        if self.wall_side:
+            if self.velocity_y:
+                step = int(self.animation_time * CRAWL_ANIMATION_FPS) % len(self.climb_images)
+            else:
+                step = 0
+            self.image = self.climb_images[step]
+        elif self.anchor:
+            to_anchor = self.anchor - pygame.Vector2(self.rect.center)
+            # The swing pose has both arms up, so tilt it to point them at the web.
+            angle = -math.degrees(math.atan2(to_anchor.x, -to_anchor.y))
+            self.image = pygame.transform.rotate(self.swing_image, angle)
+        elif not self.on_ground:
+            self.image = self.jump_image if self.velocity_y < 0 else frames["dive"][0]
+        elif self.velocity_x:
+            step = int(self.animation_time * RUN_ANIMATION_FPS) % len(frames["run"])
+            self.image = frames["run"][step]
+        elif keys[pygame.K_SPACE]:
+            self.image = self.swing_image
+        else:
+            self.image = self.stand_image
+
     def take_hit(self):
         """Return True only when this hit actually removes a heart."""
         if self.hit_cooldown > 0:
@@ -95,7 +265,20 @@ class SpiderMan:
         return True
 
     def draw(self, surface):
-        surface.blit(self.moves[self.frame], self.rect)
+        if self.anchor:
+            to_anchor = self.anchor - pygame.Vector2(self.rect.center)
+            hands = pygame.Vector2(self.rect.center) + to_anchor.normalize() * 55
+            pygame.draw.line(surface, (235, 235, 235), hands, self.anchor, 3)
+            image_rect = self.image.get_rect(center=self.rect.center)
+        elif self.wall_side:
+            image_rect = self.image.get_rect(midbottom=self.rect.midbottom)
+            if self.wall_side < 0:
+                image_rect.left = 0
+            else:
+                image_rect.right = WIDTH
+        else:
+            image_rect = self.image.get_rect(midbottom=self.rect.midbottom)
+        surface.blit(self.image, image_rect)
         if self.web_active:
             surface.blit(self.web_shot, self.web_rect)
 
