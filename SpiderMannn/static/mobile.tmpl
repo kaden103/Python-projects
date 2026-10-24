@@ -372,6 +372,19 @@ config = {
         // iOS Safari ignores user-scalable=no, so block pinch zoom and page dragging here.
         document.addEventListener("gesturestart", (event) => event.preventDefault());
         document.addEventListener("touchmove", (event) => event.preventDefault(), { passive: false });
+
+        // Go full screen on the first tap so the browser's address bar doesn't take up room
+        // (Android and iPad; iPhone Safari doesn't allow it, so it just stays as it is).
+        document.addEventListener("touchend", function goFullScreen() {
+            document.removeEventListener("touchend", goFullScreen);
+            const page = document.documentElement;
+            const request = page.requestFullscreen || page.webkitRequestFullscreen;
+            if (!request || document.fullscreenElement || document.webkitFullscreenElement) return;
+            try {
+                const result = request.call(page, { navigationUI: "hide" });
+                if (result && result.catch) result.catch(() => {});
+            } catch (error) {}
+        });
     </script>
 
     <script src="https://pygame-web.github.io/archives/0.9//browserfs.min.js"></script>

@@ -38,6 +38,9 @@ PLATFORMS = [
     pygame.Rect(705, 702, 130, 34),
 ]
 DROP_THROUGH_TIME = 0.25
+PUNCH_TIME = 0.16
+PUNCH_COOLDOWN = 0.3
+PUNCH_LUNGE = 260
 STOMP_BOUNCE = 820
 
 # Game feel
@@ -56,6 +59,7 @@ UP_KEYS = (pygame.K_w, pygame.K_UP)
 DOWN_KEYS = (pygame.K_s, pygame.K_DOWN)
 SWING_KEYS = (pygame.K_e, pygame.K_LSHIFT, pygame.K_RSHIFT)
 WEB_KEYS = (pygame.K_SPACE,)
+PUNCH_KEYS = (pygame.K_f, pygame.K_j)
 
 
 def load_image(filename, *, alpha=True):

@@ -20,7 +20,8 @@ Clearing a wave restores a heart. Beat all three rounds before losing your three
 | Move | A / D or arrow keys | arrows |
 | Jump, climb up a wall | W or Up | JUMP or up arrow |
 | Drop through a ledge, climb down | S or Down | down arrow |
-| Web shot | Space (hold a direction to aim diagonally, hold S to shoot flat) | WEB |
+| Web shot | Space: left/right shoots sideways, add W for diagonal, no direction aims at the nearest enemy (straight up at the Goblin) | WEB |
+| Punch | F or J | PUNCH |
 | Swing | E or Shift | SWING |
 | Pause | P or Esc | tap to resume |
 | Sound on / off | M | |
@@ -30,11 +31,11 @@ Jump into a wall to cling to it. Land on a thug or drone from above to stomp it.
 ## Features
 - *Title, win and lose screens* with your score, time and best score (saved between games)
 - *Score and combos*: chain hits within 3 seconds for up to x5, and hits made while airborne, swinging or on a wall count double
-- *Aimable web shot* with light aim assist
+- *Aimable web shot* with light aim assist, and a punch for close fights
 - *Ledges* you can land on, drop through, and hide under (pumpkins and bottles smash on them)
 - *Game feel*: hit flashes, screen shake, hit-stop, particles and comic-book "WHAM!" words
 - *Sound effects and chiptune music*
-- *Phone and tablet support* with on-screen buttons
+- *Phone and tablet support*: big on-screen buttons in a panel below the game (upright) or on both sides (sideways), and full screen on the first tap where the browser allows it
 
 ## Code layout (`SpiderMannn/`)
 - `main.py`: entry point (pygbag runs this for the web build)

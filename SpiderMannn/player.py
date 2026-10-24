@@ -16,6 +16,10 @@ from settings import (
     PLATFORMS,
     PLAYER_HIT_COOLDOWN,
     PLAYER_SPEED,
+    PUNCH_COOLDOWN,
+    PUNCH_KEYS,
+    PUNCH_LUNGE,
+    PUNCH_TIME,
     RIGHT_KEYS,
     RUN_ANIMATION_FPS,
     SCREEN_RECT,
@@ -93,6 +97,10 @@ class SpiderMan:
         self.web_image = self.web_shot
         self.web_rect = pygame.Rect(0, 0, 36, 36)  # Hitbox around the tip of the web
         self.web_style = False  # Fired while airborne, swinging or on a wall
+        self.punch_timer = 0.0
+        self.punch_cooldown = 0.0
+        self.punch_held = False
+        self.punch_hits = set()  # Everything this punch already hit, so it only counts once
         self.hit_cooldown = 0.0
         self.events = []  # (name, position) for the game to turn into sounds and effects
 
@@ -100,9 +108,12 @@ class SpiderMan:
     def airborne(self):
         return not self.on_ground or self.wall_side != 0
 
-    def update(self, keys, dt, targets=()):
-        """targets: (position, velocity) pairs the web shot can lock onto."""
+    def update(self, keys, dt, targets=(), auto_targets=()):
+        """targets: (position, velocity) pairs the web shot can bend onto.
+        auto_targets: the ones a web fired with no direction held aims straight at."""
         self.hit_cooldown = max(0.0, self.hit_cooldown - dt)
+        self.punch_timer = max(0.0, self.punch_timer - dt)
+        self.punch_cooldown = max(0.0, self.punch_cooldown - dt)
         self.drop_timer = max(0.0, self.drop_timer - dt)
         self.animation_time += dt
 
@@ -134,8 +145,18 @@ class SpiderMan:
             self.on_ground = False
         self.down_held = down_pressed
 
+        punch_pressed = keys.any(PUNCH_KEYS)
+        if punch_pressed and not self.punch_held and self.punch_cooldown <= 0 and not self.anchor and not self.wall_side:
+            self.punch_timer = PUNCH_TIME
+            self.punch_cooldown = PUNCH_COOLDOWN
+            self.punch_hits = set()
+            self.events.append(("punch", self.rect.center))
+        self.punch_held = punch_pressed
+
         if self.wall_side:
             self._crawl(horizontal_direction, vertical_direction)
+        elif self.on_ground and self.punch_timer > 0:
+            self.velocity_x = self.facing * PUNCH_LUNGE  # Step into the punch
         elif self.anchor:
             self._swing(horizontal_direction, dt)
         elif self.on_ground:
@@ -159,7 +180,7 @@ class SpiderMan:
         if self.on_ground and not was_on_ground and landing_speed > 700:
             self.events.append(("land", self.rect.midbottom))
 
-        self._update_web_shot(keys, horizontal_direction, vertical_direction, dt, targets)
+        self._update_web_shot(keys, horizontal_direction, vertical_direction, dt, targets, auto_targets)
         self._choose_image(keys)
 
     def _attach_swing_web(self):
@@ -273,8 +294,11 @@ class SpiderMan:
                 return
         self.platform = None
 
-    def _aim_direction(self, horizontal_direction, vertical_direction, targets):
-        """Up by default, diagonal while steering, flat while holding down. Then aim assist."""
+    def _aim_direction(self, horizontal_direction, vertical_direction, targets, auto_targets):
+        """Left/right shoots sideways, adding up shoots diagonally, up alone shoots straight up,
+        and no direction aims at the nearest enemy (or straight up if there is none).
+        Then a light aim assist bends the shot onto a target that is nearly in line."""
+        origin = pygame.Vector2(self.rect.center)
         if self.wall_side:
             horizontal = -self.wall_side
         elif self.anchor and abs(self.velocity_x) > 150:
@@ -282,15 +306,25 @@ class SpiderMan:
         else:
             horizontal = horizontal_direction
 
-        if vertical_direction > 0:
-            direction = pygame.Vector2(horizontal or self.facing, 0)
-        elif horizontal:
+        if horizontal and vertical_direction < 0:
             direction = pygame.Vector2(horizontal, -1).normalize()
-        else:
+        elif horizontal:
+            direction = pygame.Vector2(horizontal, 0)
+        elif vertical_direction < 0:
             direction = pygame.Vector2(0, -1)
+        elif vertical_direction > 0:
+            direction = pygame.Vector2(self.facing, 0)
+        else:
+            nearest = min(
+                (pygame.Vector2(position) for position, _velocity in auto_targets),
+                key=lambda position: position.distance_squared_to(origin),
+                default=None,
+            )
+            if nearest is not None and nearest != origin:
+                direction = (nearest - origin).normalize()
+            else:
+                direction = pygame.Vector2(0, -1)
 
-        # Bend the shot onto a target that is nearly in line, leading it by its speed.
-        origin = pygame.Vector2(self.rect.center)
         best_angle = WEB_AIM_ASSIST
         best_direction = None
         for position, velocity in targets:
@@ -305,9 +339,9 @@ class SpiderMan:
                 best_direction = to_target.normalize()
         return best_direction or direction
 
-    def _update_web_shot(self, keys, horizontal_direction, vertical_direction, dt, targets):
+    def _update_web_shot(self, keys, horizontal_direction, vertical_direction, dt, targets, auto_targets):
         if keys.any(WEB_KEYS) and not self.web_active:
-            direction = self._aim_direction(horizontal_direction, vertical_direction, targets)
+            direction = self._aim_direction(horizontal_direction, vertical_direction, targets, auto_targets)
             self.web_pos = pygame.Vector2(self.rect.center) + direction * 50
             self.web_velocity = direction * WEB_SPEED
             angle = -math.degrees(math.atan2(direction.x, -direction.y))
@@ -330,6 +364,8 @@ class SpiderMan:
             else:
                 step = 0
             self.image = self.climb_images[step]
+        elif self.punch_timer > 0:
+            self.image = frames["run"][0]  # The run frame with his arm thrown forward
         elif self.anchor:
             to_anchor = self.anchor - pygame.Vector2(self.rect.center)
             # The swing pose has both arms up, so tilt it to point them at the web.
@@ -344,6 +380,19 @@ class SpiderMan:
             self.image = self.swing_image
         else:
             self.image = self.stand_image
+
+    @property
+    def punch_rect(self):
+        """The fist's hitbox while a punch is out, else None."""
+        if self.punch_timer <= 0:
+            return None
+        fist = pygame.Rect(0, 0, 84, 70)
+        fist.centery = self.rect.top + 45
+        if self.facing > 0:
+            fist.left = self.rect.right - 14
+        else:
+            fist.right = self.rect.left + 14
+        return fist
 
     def take_hit(self, from_x=None):
         """Return True only when this hit actually removes a heart."""
@@ -393,6 +442,15 @@ class SpiderMan:
         blinking = self.hit_cooldown > 0 and int(self.hit_cooldown * 16) % 2
         if not blinking:
             surface.blit(self.image, image_rect)
+
+        punch = self.punch_rect
+        if punch:
+            # A swoosh in front of the fist.
+            progress = 1 - self.punch_timer / PUNCH_TIME
+            arc = punch.inflate(-10, 0)
+            start, end = (-1.2, 1.2) if self.facing > 0 else (math.pi - 1.2, math.pi + 1.2)
+            sweep = start + (end - start) * min(1.0, progress * 1.6)
+            pygame.draw.arc(surface, (255, 255, 255), arc, min(start, sweep), max(start, sweep), 5)
 
         if self.web_active:
             tail = self.web_pos - self.web_velocity.normalize() * 70

@@ -24,6 +24,7 @@ from settings import (
     load_image,
 )
 from storage import load_best, save_best
+import web
 
 
 # Spawn lists: (seconds into the wave, enemy, side it walks in from).
@@ -60,6 +61,8 @@ TIME_BONUS_PER_SECOND = 25
 HEART_BONUS = 1000
 
 HIT_WORDS = ["THWIP!", "WHAM!", "POW!", "SPLAT!", "THWACK!"]
+PANEL_COLOR = (14, 18, 40)
+PUNCH_WORDS = ["POW!", "SOCK!", "BAM!", "KRAK!"]
 YELLOW = (255, 225, 50)
 WHITE = (255, 255, 255)
 RED = (255, 70, 60)
@@ -74,7 +77,11 @@ def format_time(seconds):
 class Game:
     def __init__(self):
         pygame.init()
-        self.screen = pygame.display.set_mode((WIDTH, HEIGHT))
+        # The game always draws onto self.screen (1024x940). On phones the window is bigger
+        # than that, with a panel for the touch buttons, and self.screen is copied into it.
+        self.display = pygame.display.set_mode((WIDTH, HEIGHT))
+        self.screen = self.display
+        self.layout_timer = 0.0
         pygame.display.set_caption("Spider-Man: The Return of the Green Goblin")
         self.clock = pygame.time.Clock()
         # Everything in the city is drawn here first so the screen shake can move it as one.
@@ -96,6 +103,8 @@ class Game:
         self.ready_at = 0
         self.text_cache = {}
         self.reset()
+        if web.is_touch_device():
+            self.apply_layout("landscape" if web.is_landscape() else "portrait")
 
     # --- Setup -------------------------------------------------------------------
 
@@ -215,7 +224,8 @@ class Game:
             self.play_time += dt
 
         keys = ControlState(pygame.key.get_pressed(), self.touch.held_keys())
-        self.spiderman.update(keys, dt, self.aim_targets())
+        auto_targets = [(enemy.rect.center, enemy.velocity) for enemy in self.enemies if enemy.hittable]
+        self.spiderman.update(keys, dt, self.aim_targets(), auto_targets)
         self.green_goblin.update(self.spiderman, dt)
         for enemy in self.enemies:
             enemy.update(self.spiderman, dt)
@@ -248,6 +258,8 @@ class Game:
         for name, position in self.spiderman.events:
             if name in ("jump", "thwip", "swing"):
                 self.audio.play(name)
+            elif name == "punch":
+                self.audio.play("swing")
             elif name == "land":
                 self.effects.burst(position, [(170, 160, 140), (120, 110, 100)], 10, 220, life=0.35, size=(3, 5), upward=True)
         self.spiderman.events.clear()
@@ -300,8 +312,22 @@ class Game:
                 for enemy in self.enemies:
                     if enemy.hittable and player.web_rect.colliderect(enemy.rect):
                         player.web_active = False
-                        self.on_enemy_hit(enemy, player.web_style, stomp=False)
+                        self.on_enemy_hit(enemy, player.web_style, "web")
                         break
+
+        punch = player.punch_rect
+        if punch:
+            for enemy in self.enemies:
+                if enemy.hittable and id(enemy) not in player.punch_hits and punch.colliderect(enemy.rect):
+                    player.punch_hits.add(id(enemy))
+                    self.on_enemy_hit(enemy, player.airborne, "punch")
+            if (
+                goblin.hittable
+                and id(goblin) not in player.punch_hits
+                and punch.colliderect(goblin.rect.inflate(-20, -20))
+            ):
+                player.punch_hits.add(id(goblin))
+                self.on_goblin_hit(player.airborne)
 
         # Landing on an enemy from above stomps it and bounces Spider-Man back up.
         if player.velocity_y > 150 and not player.anchor:
@@ -312,7 +338,7 @@ class Game:
                     and player.rect.bottom <= enemy.rect.top + 34
                 ):
                     player.bounce()
-                    self.on_enemy_hit(enemy, True, stomp=True)
+                    self.on_enemy_hit(enemy, True, "stomp")
                     break
 
         if self.ending:
@@ -366,10 +392,16 @@ class Game:
             self.freeze = 0.25
             self.start_ending("win")
 
-    def on_enemy_hit(self, enemy, style, stomp):
+    def on_enemy_hit(self, enemy, style, how):
+        """how: "web", "punch" or "stomp"."""
         result = enemy.hit(self.spiderman.rect.centerx)
         position = enemy.rect.center
-        if stomp:
+        stomp = how == "stomp"
+        if how == "punch":
+            self.audio.play("hit")
+            self.effects.burst(position, [YELLOW, WHITE, RED], 16, 360, life=0.35)
+            self.effects.popup(random.choice(PUNCH_WORDS), (position[0], enemy.rect.top - 20), None, 60)
+        elif stomp:
             self.audio.play("stomp")
             self.effects.burst(enemy.rect.midtop, [YELLOW, WHITE], 14, 300, life=0.4, upward=True)
             self.effects.popup("BONK!", (position[0], enemy.rect.top - 20), YELLOW, 60)
@@ -474,7 +506,6 @@ class Game:
         self.effects.draw_flash(self.screen)
         self.draw_hud()
         self.draw_banner()
-        self.touch.draw(self.screen)
         if self.paused:
             self.screen.blit(self.dim, (0, 0))
             self.blit_centered(self.text("PAUSED", YELLOW, 120), HEIGHT // 2 - 60)
@@ -537,8 +568,8 @@ class Game:
             self.blit_centered(self.text("PRESS ENTER OR TAP TO START", YELLOW, 56), 590)
         lines = [
             "A / D or arrows: move     W: jump and climb     S: drop down",
-            "SPACE: web shot  (hold a direction to aim it)",
-            "E or SHIFT: swing     P: pause     M: sound on / off",
+            "SPACE: web  (left/right: sideways   +W: diagonal   none: auto-aim)",
+            "F: punch     E or SHIFT: swing     P: pause     M: sound on / off",
         ]
         for index, line in enumerate(lines):
             self.blit_centered(self.text(line, WHITE, 34), 670 + index * 40)
@@ -602,7 +633,39 @@ class Game:
             self.draw_win()
         else:
             self.draw_lose()
+
+        if self.touch.has_panel:
+            self.display.fill(PANEL_COLOR)
+            self.display.blit(self.screen, self.touch.game_offset)
+            if self.scene == "play":
+                self.touch.draw(self.display)
+        elif self.scene == "play":
+            self.touch.draw(self.screen)
         pygame.display.flip()
+
+    # --- Phone layout ------------------------------------------------------------
+
+    def apply_layout(self, name):
+        self.touch.set_layout(name)
+        self.display = pygame.display.set_mode(self.touch.size)
+        if name == "overlay":
+            self.screen = self.display
+        else:
+            self.screen = pygame.Surface((WIDTH, HEIGHT)).convert()
+        web.fit_canvas(*self.touch.size)
+
+    def update_layout(self, dt):
+        """On phones, switch between the upright and sideways layouts as the phone turns."""
+        if not web.ON_WEB:
+            return
+        self.layout_timer -= dt
+        if self.layout_timer > 0:
+            return
+        self.layout_timer = 0.5
+        if self.touch.has_panel or self.touch.seen_finger or web.is_touch_device():
+            wanted = "landscape" if web.is_landscape() else "portrait"
+            if wanted != self.touch.layout:
+                self.apply_layout(wanted)
 
     # --- Main loop ---------------------------------------------------------------
 
@@ -640,6 +703,7 @@ class Game:
 
             if not running:
                 break
+            self.update_layout(dt)
 
             if self.scene == "title":
                 if confirm:
