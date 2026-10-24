@@ -121,8 +121,27 @@ async def custom_site():
         pygame.draw.rect(screen,(10,10,10),( marginx-ux(10), marginy-uy(10), (total*slot)+ux(20), uy(110) ) )
         pygame.draw.rect(screen,(0,255,0), ( marginx, marginy, track.pos*slot, uy(90)) )
 
+    # Big, clear text for phones: what is happening, and that they need to tap.
+    # Never let the message break loading: if fonts aren't ready, just skip the text.
+    message_fonts = []
+
+    def show_message(title, detail=""):
+        try:
+            if not message_fonts:
+                message_fonts.extend([pygame.font.Font(None, 110), pygame.font.Font(None, 56)])
+            big_font, small_font = message_fonts
+            screen.fill((14, 18, 40, 255))
+            title_image = big_font.render(title, True, (255, 225, 50))
+            screen.blit(title_image, title_image.get_rect(center=(ux(.050), uy(.030))))
+            if detail:
+                detail_image = small_font.render(detail, True, (255, 255, 255))
+                screen.blit(detail_image, detail_image.get_rect(center=(ux(.050), uy(.070))))
+        except Exception as error:
+            print("loading message:", error)
+
     # wait until zip mount + overlayfs is complete
     while not track.ready:
+        show_message("LOADING...", "The first load can take a minute on mobile data")
         pg_bar(track.pos)
         compose()
         await asyncio.sleep(.1)
@@ -168,10 +187,7 @@ async def custom_site():
     if not platform.window.MM.UME:
 
         # now make a prompt
-        fnt = pygame.sysfont.SysFont("freesans",  uy(80) )
-        prompt = fnt.render("Ready to start !", True, "blue")
-        pg_bar(track.len)
-        screen.blit(prompt, ( marginx+ ux(80), marginy - uy(10) ) )
+        show_message("TAP TO START", "Spider-Man is ready")
         compose()
         print("""
         * Waiting for media user engagement : please click/touch page *
