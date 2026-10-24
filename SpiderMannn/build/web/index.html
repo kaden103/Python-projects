@@ -389,6 +389,18 @@ config = {
         document.addEventListener("gesturestart", (event) => event.preventDefault());
         document.addEventListener("touchmove", (event) => event.preventDefault(), { passive: false });
 
+        // iPhone Safari: pygbag waits for a "click" before starting (sound needs a user
+        // gesture), but the touch handling here and in SDL swallows the click a tap would
+        // make, so the game sat on "Ready to start" forever. Treat any tap as that click.
+        function unlockStart() {
+            const media = window.MM;
+            if (!media || media.UME) return;
+            if (typeof media.is_safari === "function") media.is_safari();
+            else media.UME = 1;
+        }
+        document.addEventListener("touchend", unlockStart, true);
+        document.addEventListener("pointerup", unlockStart, true);
+
         // Go full screen on the first tap so the browser's address bar doesn't take up room
         // (Android and iPad; iPhone Safari doesn't allow it, so it just stays as it is).
         document.addEventListener("touchend", function goFullScreen() {
